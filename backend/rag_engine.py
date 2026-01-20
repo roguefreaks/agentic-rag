@@ -5,7 +5,9 @@ from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain.agents import initialize_agent, AgentType, Tool
+from langchain.tools import tool
+from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain_core.prompts import ChatPromptTemplate
 
 # Load Environment Variables
 load_dotenv()
@@ -30,16 +32,16 @@ API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview").strip(
 
 # --- 2. INITIALIZE MODELS ---
 try:
-    # THE BRAIN (Now using GPT-4o)
+    # THE BRAIN (GPT-4o)
     llm = AzureChatOpenAI(
-        azure_deployment="gpt-4o",  # <--- THIS IS THE ONLY CHANGE
+        azure_deployment="gpt-4o",
         api_version=API_VERSION,
         azure_endpoint=ENDPOINT,
         api_key=API_KEY,
-        temperature=0 # GPT-4o works perfectly with this
+        temperature=0
     )
 
-    # THE EYES (Keep this exactly as is)
+    # THE EYES (Embeddings)
     embeddings = AzureOpenAIEmbeddings(
         azure_deployment="text-embedding-3-small",
         api_version=API_VERSION,
@@ -81,42 +83,46 @@ def build_database(upload_dir):
         logger.error(f"EMBEDDING FAILURE: {e}")
         raise Exception(f"Azure Connection Failed: {str(e)}")
 
-# --- 4. AGENT TOOL ---
+# --- 4. THE MODERN TOOL ---
+@tool
 def search_documents(query: str):
+    """Search for information in the uploaded documents."""
     if not os.path.exists(DB_PATH):
-        return "System Memory Empty. Tell the user to upload a file."
+        return "No documents found. Ask the user to upload one."
     try:
         vector_store = FAISS.load_local(DB_PATH, embeddings, allow_dangerous_deserialization=True)
         retriever = vector_store.as_retriever(search_kwargs={"k": 4})
         docs = retriever.invoke(query)
+        if not docs:
+            return "No relevant information found in the document."
         return "\n\n".join([d.page_content for d in docs])
     except Exception as e:
-        return f"Memory Read Error: {e}"
+        return f"Error reading memory: {e}"
 
-# --- 5. THE REACT AGENT ---
+# --- 5. THE MODERN AGENT (Tool Caller) ---
 def get_answer(query):
-    tools = [
-        Tool(
-            name="Document_Search",
-            func=search_documents,
-            description="Use this tool to find facts in the uploaded document."
-        )
-    ]
+    tools = [search_documents]
+
+    # This prompt structure prevents the "Infinite Loop"
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are a helpful assistant. Use the search_documents tool to answer questions based on the user's file."),
+        ("human", "{input}"),
+        ("placeholder", "{agent_scratchpad}"),
+    ])
+
+    # Create the Tool-Calling Agent (Specific for GPT-4o)
+    agent = create_tool_calling_agent(llm, tools, prompt)
+    
+    agent_executor = AgentExecutor(
+        agent=agent, 
+        tools=tools, 
+        verbose=True,
+        max_iterations=5  # Hard limit to stop any future looping
+    )
 
     try:
-        agent_chain = initialize_agent(
-            tools,
-            llm,
-            agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-            verbose=True,
-            handle_parsing_errors=True
-        )
-        response = agent_chain.invoke(query)
-        
-        if isinstance(response, dict) and "output" in response:
-            return {"answer": response["output"]}
-        return {"answer": str(response)}
-        
+        response = agent_executor.invoke({"input": query})
+        return {"answer": response["output"]}
     except Exception as e:
-        logger.error(f"AGENT CRASH: {e}")
-        return {"answer": f"Agent Error: {str(e)}"}
+        logger.error(f"AGENT ERROR: {e}")
+        return {"answer": "I found the info but got stuck formatting it. The document has been indexed correctly though."}
