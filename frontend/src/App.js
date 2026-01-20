@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './App.css';
 
-// Simple ID generator
+// ID Generator
 const generateSessionId = () => 'session-' + Math.random().toString(36).substr(2, 9);
 
 function App() {
@@ -30,11 +30,10 @@ function App() {
 
     setFiles(uploadedFiles);
     
-    // Create FormData
     const formData = new FormData();
-    // APPEND SESSION ID FIRST
+    // 1. Append Session ID
     formData.append("session_id", sessionId || "fallback-id");
-    
+    // 2. Append Files
     uploadedFiles.forEach(file => {
       formData.append("files", file);
     });
@@ -42,18 +41,14 @@ function App() {
     setMessages(prev => [...prev, { sender: "system", text: `[SYSTEM] Uploading ${uploadedFiles.length} files...` }]);
 
     try {
-      // POST request
-      const response = await axios.post("https://agentic-rag-oens.onrender.com/upload", formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      setMessages(prev => [...prev, { sender: "system", text: "[SYSTEM] Indexing Success. Ready to chat." }]);
+      // --- THE FIX IS HERE ---
+      // We do NOT set 'Content-Type'. We let Axios handle it.
+      const response = await axios.post("https://agentic-rag-oens.onrender.com/upload", formData);
+      
+      setMessages(prev => [...prev, { sender: "system", text: "[SYSTEM] Success! I have read your documents." }]);
     } catch (error) {
-      console.error("Upload Failed:", error);
-      let errMsg = "Upload Failed.";
-      if (error.response && error.response.data) {
-        errMsg += " Server said: " + JSON.stringify(error.response.data);
-      }
-      setMessages(prev => [...prev, { sender: "error", text: errMsg }]);
+      console.error("Upload Error:", error);
+      setMessages(prev => [...prev, { sender: "error", text: "[ERROR] Upload Failed. Server rejected the data." }]);
     }
   };
 
@@ -71,7 +66,7 @@ function App() {
       });
       setMessages(prev => [...prev, { sender: "bot", text: response.data.answer }]);
     } catch (error) {
-      setMessages(prev => [...prev, { sender: "error", text: "Connection Error. backend might be sleeping." }]);
+      setMessages(prev => [...prev, { sender: "error", text: "Connection Error. The brain is offline." }]);
     }
     setLoading(false);
   };
@@ -80,13 +75,11 @@ function App() {
     <div className="app-container">
       <div className="sidebar">
         <div className="sidebar-header">
-          {/* VISUAL VERSION CHECKER */}
-          <h2>⚡ AGENTIC_RAG v5.0</h2>
+          <h2>⚡ AGENTIC_RAG v6.0</h2> {/* Version Tag Updated */}
         </div>
         <div className="upload-section">
           <label className="upload-btn">
             [ + UPLOAD DOC ]
-            {/* FORCE FILE PICKER */}
             <input 
               type="file" 
               multiple 
