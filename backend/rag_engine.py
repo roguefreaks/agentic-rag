@@ -30,16 +30,16 @@ API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview").strip(
 
 # --- 2. INITIALIZE MODELS ---
 try:
-    # THE BRAIN (Switched to GPT-4o for perfect Agent compatibility)
+    # THE BRAIN (Now using GPT-4o)
     llm = AzureChatOpenAI(
-        azure_deployment="gpt-4o",  # <--- MATCHES YOUR SCREENSHOT
+        azure_deployment="gpt-4o",  # <--- THIS IS THE ONLY CHANGE
         api_version=API_VERSION,
         azure_endpoint=ENDPOINT,
         api_key=API_KEY,
-        temperature=0  # GPT-4o allows this (o3-mini did not)
+        temperature=0 # GPT-4o works perfectly with this
     )
 
-    # THE EYES (Embeddings)
+    # THE EYES (Keep this exactly as is)
     embeddings = AzureOpenAIEmbeddings(
         azure_deployment="text-embedding-3-small",
         api_version=API_VERSION,
@@ -104,7 +104,6 @@ def get_answer(query):
     ]
 
     try:
-        # Standard ReAct Agent
         agent_chain = initialize_agent(
             tools,
             llm,
