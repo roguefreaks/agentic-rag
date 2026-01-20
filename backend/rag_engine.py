@@ -5,6 +5,8 @@ from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
+from langchain.agents import initialize_agent, AgentType, Tool
+from langchain.memory import ConversationBufferMemory
 
 # Load env vars
 load_dotenv()
@@ -13,45 +15,45 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- CONFIGURATION (WITH CLEANING) ---
-# We use .strip() to remove accidental spaces or quotes from Render
+# --- 1. CRITICAL FIX: SANITIZE INPUTS ---
+# This fixes the "DeploymentNotFound" 404 error by cleaning user mistakes
 def get_clean_env(key):
     val = os.getenv(key)
-    if val:
-        return val.strip().strip('"').strip("'")
-    return None
+    if not val:
+        return ""
+    # Remove quotes, spaces, and trailing slashes (which break Azure)
+    return val.strip().strip('"').strip("'").rstrip('/')
 
 DB_PATH = "faiss_index_web"
 API_KEY = get_clean_env("AZURE_OPENAI_API_KEY")
 ENDPOINT = get_clean_env("AZURE_OPENAI_ENDPOINT")
 API_VERSION = get_clean_env("AZURE_OPENAI_API_VERSION") or "2024-12-01-preview"
 
-# Log the config (Masked) to help debug
-logger.info(f"--- SYSTEM STARTUP ---")
-logger.info(f"Endpoint: {ENDPOINT}")
-logger.info(f"Version: {API_VERSION}")
-logger.info(f"Key Loaded: {'Yes' if API_KEY else 'No'}")
+# Log connection details (Masked) for debugging
+logger.info(f"Connecting to: {ENDPOINT}")
+logger.info(f"Using Version: {API_VERSION}")
 
-# MODELS
+# --- 2. INITIALIZE MODELS ---
 try:
     llm = AzureChatOpenAI(
-        azure_deployment="o3-mini", # Must match your screenshot EXACTLY
+        azure_deployment="o3-mini",  # Your deployment name
         api_version=API_VERSION,
         azure_endpoint=ENDPOINT,
-        api_key=API_KEY
+        api_key=API_KEY,
+        temperature=0  # Agents need precision
     )
 
     embeddings = AzureOpenAIEmbeddings(
-        azure_deployment="text-embedding-3-small", # Must match your screenshot EXACTLY
+        azure_deployment="text-embedding-3-small", # Your embedding name
         api_version=API_VERSION,
         azure_endpoint=ENDPOINT,
         api_key=API_KEY
     )
 except Exception as e:
-    logger.error(f"Model Init Error: {e}")
+    logger.error(f"CRITICAL MODEL ERROR: {e}")
 
 def build_database(upload_dir):
-    """Reads all files and rebuilds the index."""
+    """Reads files and rebuilds the Vector Memory."""
     documents = []
     if not os.path.exists(upload_dir):
         os.makedirs(upload_dir)
@@ -71,47 +73,58 @@ def build_database(upload_dir):
     if not documents:
         return "No documents found."
 
-    # Split text
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     splits = text_splitter.split_documents(documents)
 
-    # Save Index
     vector_store = FAISS.from_documents(documents=splits, embedding=embeddings)
     vector_store.save_local(DB_PATH)
-    return f"Indexed {len(documents)} pages."
+    return f"Agent Memory Updated: {len(documents)} pages indexed."
 
-def get_answer(query):
-    """Directly retrieves context and asks the LLM."""
+# --- 3. THE AGENT TOOL (The "Hand" of the Agent) ---
+def search_documents(query: str):
+    """Searches the vector database for relevant info."""
     if not os.path.exists(DB_PATH):
-        return {"answer": "System is empty. Please upload a document."}
-
+        return "Error: No documents found. Tell the user to upload a file."
+    
     try:
-        # 1. Load Memory
-        vector_store = FAISS.load_local(
-            DB_PATH, 
-            embeddings, 
-            allow_dangerous_deserialization=True
-        )
-        
-        # 2. Find relevant text
+        vector_store = FAISS.load_local(DB_PATH, embeddings, allow_dangerous_deserialization=True)
         retriever = vector_store.as_retriever(search_kwargs={"k": 4})
         docs = retriever.invoke(query)
-        
-        if not docs:
-            return {"answer": "I couldn't find any relevant info in the uploaded file."}
-            
-        # 3. Combine text
-        context_text = "\n\n".join([d.page_content for d in docs])
-        
-        # 4. Send to AI
-        system_msg = "You are a precise assistant. Answer the question based ONLY on the provided Context."
-        user_msg = f"Context:\n{context_text}\n\nQuestion: {query}"
-        
-        messages = [("system", system_msg), ("user", user_msg)]
-        
-        response = llm.invoke(messages)
-        return {"answer": response.content}
-
+        return "\n\n".join([d.page_content for d in docs])
     except Exception as e:
-        logger.error(f"Error: {e}")
-        return {"answer": f"System Error: {str(e)}"}
+        return f"Memory Access Error: {str(e)}"
+
+# --- 4. THE AGENT BRAIN (The "Mind") ---
+def get_answer(query):
+    # Define the "Tools" the agent can use
+    tools = [
+        Tool(
+            name="Document_Search",
+            func=search_documents,
+            description="Use this to look up information in the uploaded PDF/files. Always use this first."
+        )
+    ]
+
+    # Initialize a REAL ReAct Agent (Reason+Act)
+    # This creates the "Thought -> Action -> Observation" loop your friend wants
+    agent_chain = initialize_agent(
+        tools, 
+        llm, 
+        agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, 
+        verbose=True, # This logs the "Thinking" process
+        handle_parsing_errors=True
+    )
+
+    try:
+        # Run the agent loop
+        response = agent_chain.invoke(query)
+        
+        # If the output is a dictionary (common in newer versions), extract 'output'
+        if isinstance(response, dict) and "output" in response:
+            return {"answer": response["output"]}
+        return {"answer": str(response)}
+        
+    except Exception as e:
+        logger.error(f"Agent Crash: {e}")
+        # Detailed error for debugging
+        return {"answer": f"Agent Error: {str(e)}. Check Render Logs for 'DeploymentNotFound'."}
