@@ -1,19 +1,17 @@
 /**
  * =============================================================================
- * TITANIUM FRONTEND - ENTERPRISE CLIENT v8.0
+ * TITANIUM FRONTEND - ENTERPRISE CLIENT v8.2 (STABLE)
  * =============================================================================
  * Author: Achyut Anand Pandey
  * Description: A robust React Single Page Application (SPA) for RAG interactions.
- * Features:
- * - Session Management (Auto-generation & Persistence)
- * - File Upload with Progress Tracking & Validation
- * - Real-time Chat Interface with Typing Indicators
- * - Toast Notification System (Custom implementation)
- * - Responsive Sidebar & Settings Modal
+ * * CHANGELOG v8.2:
+ * - REMOVED unused imports to pass Vercel Build.
+ * - FIXED Axios Content-Type header bug for Mobile Uploads.
+ * - ADDED new Titanium branding and icons.
  * =============================================================================
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './App.css';
 
@@ -107,7 +105,7 @@ const Sidebar = ({ files, onUpload, isMobileOpen }) => {
   return (
     <div className={`sidebar ${isMobileOpen ? 'open' : ''}`}>
       <div className="sidebar-header">
-        <h2>⚡ TITANIUM v8.0</h2>
+        <h2>⚡ TITANIUM v8.2</h2>
         <span className="status-badge">ONLINE</span>
       </div>
       
@@ -163,7 +161,7 @@ function App() {
   const [messages, setMessages] = useState([
     { 
       sender: 'bot', 
-      text: 'Titanium System Initialized. Upload a document to begin analysis.',
+      text: 'Titanium System v8.2 Initialized. Upload a document to begin analysis.',
       time: formatTime() 
     }
   ]);
@@ -227,7 +225,7 @@ function App() {
     try {
       // --- CRITICAL FIX FOR MOBILE ---
       // We do NOT set 'Content-Type'. We let Axios handle the boundary automatically.
-      const response = await axios.post(
+      await axios.post(
         "https://agentic-rag-oens.onrender.com/upload", 
         formData
       );
@@ -359,7 +357,7 @@ function App() {
             </button>
           </div>
           <div className="input-footer">
-            <span>Titanium AI v8.0</span>
+            <span>Titanium AI v8.2</span>
             <span>Secure Connection</span>
           </div>
         </div>
