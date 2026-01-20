@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: rag_backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env  # Uses your API Key
+    volumes:
+      - ./backend/faiss_index_web:/app/faiss_index_web # Persist the database
+
+  frontend:
+    build: ./frontend
+    container_name: rag_frontend
+    ports:
+      - "3000:80" # Map computer port 3000 to container port 80
+    depends_on:
+      - backend

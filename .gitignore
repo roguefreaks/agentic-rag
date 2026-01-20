@@ -1,0 +1,7 @@
+"node_modules/" 
+"__pycache__/" 
+".env" 
+"uploaded_files/" 
+"faiss_index_web/" 
+".git/" 
+".DS_Store" 

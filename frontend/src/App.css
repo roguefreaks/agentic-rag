@@ -1,0 +1,192 @@
+/* Hacker Theme - App.css */
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;600&display=swap');
+
+:root {
+  --bg-color: #050505;
+  --terminal-green: #00ff41;
+  --terminal-dim: #008F11;
+  --error-red: #ff3333;
+  --surface: #111;
+  --border: #333;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-color);
+  color: var(--terminal-green);
+  font-family: 'Fira Code', monospace;
+  overflow: hidden;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-color); }
+::-webkit-scrollbar-thumb { background: var(--terminal-dim); }
+
+.app-container { display: flex; height: 100vh; width: 100vw; }
+
+/* Sidebar */
+.sidebar {
+  width: 300px;
+  background: #0a0a0a;
+  border-right: 1px solid var(--terminal-dim);
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  box-shadow: 4px 0 15px rgba(0, 255, 65, 0.05);
+  z-index: 10;
+}
+
+.brand {
+  font-size: 1.4rem;
+  font-weight: bold;
+  margin-bottom: 30px;
+  text-shadow: 0 0 10px var(--terminal-green);
+  letter-spacing: 1px;
+}
+
+.upload-btn {
+  border: 1px dashed var(--terminal-dim);
+  padding: 15px;
+  text-align: center;
+  cursor: pointer;
+  margin-bottom: 20px;
+  transition: 0.2s;
+  font-size: 0.9rem;
+}
+.upload-btn:hover { background: rgba(0, 255, 65, 0.1); border-color: var(--terminal-green); }
+
+.files-header { font-size: 0.8rem; color: #666; margin-bottom: 10px; border-bottom: 1px solid #222; padding-bottom: 5px;}
+.file-list { flex: 1; overflow-y: auto; }
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 5px;
+  border-bottom: 1px solid #1a1a1a;
+  font-size: 0.85rem;
+  transition: 0.2s;
+}
+.file-item:hover { background: #0f0f0f; }
+.delete-btn {
+  background: none; border: none; color: #555;
+  cursor: pointer; font-weight: bold;
+}
+.delete-btn:hover { color: var(--error-red); }
+
+/* Chat Area */
+.chat-area { flex: 1; display: flex; flex-direction: column; position: relative; }
+
+.messages-container {
+  flex: 1;
+  padding: 30px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.message {
+  max-width: 80%;
+  padding: 15px 20px;
+  border-radius: 4px;
+  line-height: 1.6;
+  position: relative;
+  font-size: 0.95rem;
+  animation: fadeIn 0.3s ease;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+.user-msg {
+  align-self: flex-end;
+  background: rgba(0, 255, 65, 0.05);
+  border: 1px solid var(--terminal-dim);
+  color: var(--terminal-green);
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.05);
+}
+
+.bot-msg {
+  align-self: flex-start;
+  border-left: 3px solid var(--terminal-green);
+  background: #0f0f0f;
+  color: #ddd;
+}
+
+/* Input Area */
+.input-area {
+  padding: 20px;
+  background: var(--bg-color);
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 15px;
+}
+
+input {
+  flex: 1;
+  background: #111;
+  border: 1px solid #333;
+  color: var(--terminal-green);
+  padding: 15px;
+  font-family: 'Fira Code', monospace;
+  font-size: 1rem;
+  outline: none;
+}
+input:focus { border-color: var(--terminal-green); }
+
+button.send-btn {
+  background: var(--terminal-green);
+  color: black;
+  border: none;
+  padding: 0 30px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Fira Code', monospace;
+  transition: 0.2s;
+}
+button.send-btn:hover { background: #fff; box-shadow: 0 0 15px var(--terminal-green); }
+
+/* Footer */
+.footer {
+  text-align: center;
+  font-size: 0.75rem;
+  color: #444;
+  padding: 8px;
+  background: #020202;
+  border-top: 1px solid #111;
+}
+.footer a { color: #666; text-decoration: none; transition: 0.2s; }
+.footer a:hover { color: var(--terminal-green); }
+.linkedin-logo { color: #0077b5; font-weight: bold; }
+
+/* Boot Screen */
+.boot-screen {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: black; color: var(--terminal-green);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: 1.2rem; z-index: 9999;
+}
+/* Limit Screen (Access Denied) */
+.limit-screen {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(20, 0, 0, 0.95); /* Dark Red Tint */
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10000;
+  animation: flash 0.5s;
+}
+
+.limit-box {
+  border: 2px solid red;
+  padding: 40px;
+  background: black;
+  color: red;
+  font-size: 2rem;
+  font-weight: bold;
+  text-align: center;
+  box-shadow: 0 0 50px red;
+}
+
+@keyframes flash {
+  0% { background-color: black; }
+  50% { background-color: red; }
+  100% { background-color: rgba(20, 0, 0, 0.95); }
+}
