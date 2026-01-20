@@ -50,23 +50,4 @@ The system is split into two microservices:
 
 ---
 
-## 🛠️ Local Installation & Setup
 
-### Prerequisites
-* Python 3.10+
-* Node.js 16+
-* Azure OpenAI API Credentials
-
-### 1. Backend Setup
-```bash
-cd backend
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Create .env file
-touch .env
