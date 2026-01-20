@@ -191,43 +191,34 @@ button.send-btn:hover { background: #fff; box-shadow: 0 0 15px var(--terminal-gr
   100% { background-color: rgba(20, 0, 0, 0.95); }
 }
 /* --- MOBILE RESPONSIVENESS FIX --- */
+/* --- FIXED MOBILE RESPONSIVENESS --- */
 @media (max-width: 768px) {
-  /* 1. Stack the layout vertically */
   .app-container {
-    flex-direction: column;
-    height: 100vh; /* Full viewport height */
+    flex-direction: column !important;
+    height: 100vh;
     width: 100vw;
   }
 
-  /* 2. Hide Sidebar on mobile to save space (Optional) */
-  /* Or make it smaller at the top */
   .sidebar {
-    display: none; /* Simplest fix: Focus on Chat only */
+    display: flex !important; /* FORCE SHOW */
+    width: 100% !important;
+    height: auto !important;
+    padding: 15px;
+    background-color: #161b22;
+    border-bottom: 1px solid #30363d;
+    z-index: 10;
   }
 
-  /* 3. Make Chat Window Full Width */
   .chat-container {
+    width: 100% !important;
+    flex: 1;
+  }
+
+  /* Make upload button big and easy to tap */
+  .upload-btn {
+    display: block;
     width: 100%;
-    height: 100%;
-    border-radius: 0; /* Remove corners for full screen feel */
-  }
-
-  /* 4. Fix Input Area for Mobile Thumbs */
-  .input-area {
-    width: 100%;
-    padding: 10px;
-    bottom: 0;
-    position: fixed; /* Stick to bottom */
-    background-color: #000; /* Prevent transparency issues */
-  }
-
-  input {
-    font-size: 16px; /* Prevents iPhone zoom-in on focus */
-  }
-
-  /* 5. Adjust Message Bubbles */
-  .message {
-    max-width: 85%; /* Let messages take more width */
-    font-size: 14px;
+    text-align: center;
+    padding: 12px;
   }
 }

@@ -2,6 +2,7 @@ import os
 import logging
 import re
 import shutil
+import uuid
 from typing import List, Dict, Any
 
 # Third-party imports
@@ -25,10 +26,10 @@ logging.basicConfig(
 logger = logging.getLogger("RAG_ENGINE")
 
 # Configuration Constants
-DB_PATH = "faiss_index_web"
-CHUNK_SIZE = 1200  # Increased for better context
+BASE_DB_PATH = "user_sessions" # Changed to folder for multiple users
+CHUNK_SIZE = 1200
 CHUNK_OVERLAP = 200
-MAX_HISTORY = 10   # Remember last 10 messages
+MAX_HISTORY = 10
 
 # --- 2. ROBUST UTILITIES ---
 def clean_azure_url(url: str) -> str:
@@ -42,26 +43,19 @@ def clean_azure_url(url: str) -> str:
 
 def format_clean_output(text: str) -> str:
     """Removes Markdown symbols for a cleaner chat experience."""
-    # Remove headers (###)
     text = re.sub(r'#+\s*', '', text)
-    # Remove bold/italic (** or *)
     text = re.sub(r'\*\*|__', '', text)
-    # Ensure proper spacing
     return text.strip()
 
-# --- 3. THE RAG ENGINE CLASS (Enterprise Architecture) ---
-class AgenticRAG:
+# --- 3. THE SESSION MANAGER (Multi-User Architecture) ---
+class SessionManager:
     def __init__(self):
+        self.sessions: Dict[str, Any] = {} # Store memory/DB for each user
         self._init_environment()
         self._init_models()
-        self.memory = ConversationBufferMemory(
-            memory_key="chat_history", 
-            return_messages=True
-        )
-        logger.info("AgenticRAG System Initialized Successfully.")
+        logger.info("SessionManager System Initialized Successfully.")
 
     def _init_environment(self):
-        """Loads and validates all environment variables."""
         self.api_key = os.getenv("AZURE_OPENAI_API_KEY", "").strip()
         self.endpoint = clean_azure_url(os.getenv("AZURE_OPENAI_ENDPOINT"))
         self.api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview").strip()
@@ -71,19 +65,16 @@ class AgenticRAG:
             raise ValueError("Azure API Key and Endpoint are required.")
 
     def _init_models(self):
-        """Initializes Azure Models with Retry Logic."""
         try:
-            # The Brain: GPT-4o (Standard, Powerful, Robust)
+            # Shared Models (Efficient)
             self.llm = AzureChatOpenAI(
                 azure_deployment="gpt-4o",
                 api_version=self.api_version,
                 azure_endpoint=self.endpoint,
                 api_key=self.api_key,
-                temperature=0.0, # Precision is key
+                temperature=0.0,
                 max_retries=3
             )
-
-            # The Eyes: Embeddings
             self.embeddings = AzureOpenAIEmbeddings(
                 azure_deployment="text-embedding-3-small",
                 api_version=self.api_version,
@@ -95,17 +86,15 @@ class AgenticRAG:
             logger.critical(f"Model Initialization Failed: {e}")
             raise e
 
-    def ingest_documents(self, upload_dir: str) -> str:
-        """
-        Ingest Process:
-        1. Validate Dir
-        2. Load Files (PDF/Docx)
-        3. Split Text
-        4. Vectorize & Index
-        """
+    def get_session_path(self, session_id: str):
+        """Creates a unique folder path for this specific user."""
+        return os.path.join(BASE_DB_PATH, session_id)
+
+    def ingest_documents(self, session_id: str, upload_dir: str) -> str:
+        """Processes files specifically for ONE session ID."""
         documents = []
         if not os.path.exists(upload_dir):
-            os.makedirs(upload_dir)
+            return "No files found."
 
         # 1. Load Files
         for filename in os.listdir(upload_dir):
@@ -117,15 +106,13 @@ class AgenticRAG:
                 elif filename.lower().endswith(".docx"):
                     loader = Docx2txtLoader(file_path)
                     documents.extend(loader.load())
-                else:
-                    logger.warning(f"Skipping unsupported file: {filename}")
             except Exception as e:
                 logger.error(f"Error reading {filename}: {e}")
 
         if not documents:
             return "No valid documents found to index."
 
-        # 2. Advanced Text Splitting (Respects Sentence Boundaries)
+        # 2. Split Text
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=CHUNK_SIZE, 
             chunk_overlap=CHUNK_OVERLAP,
@@ -133,62 +120,63 @@ class AgenticRAG:
         )
         splits = text_splitter.split_documents(documents)
 
-        # 3. Vector Database Creation
+        # 3. Vector Database (Unique per User)
         try:
+            user_db_path = self.get_session_path(session_id)
             vector_store = FAISS.from_documents(splits, self.embeddings)
-            vector_store.save_local(DB_PATH)
-            # Reset memory on new document upload so context is fresh
-            self.memory.clear() 
-            logger.info(f"Successfully indexed {len(documents)} pages.")
-            return f"Indexed {len(documents)} pages. I am ready for questions."
+            vector_store.save_local(user_db_path)
+            
+            # Create fresh memory for this user
+            self.sessions[session_id] = {
+                "memory": ConversationBufferMemory(memory_key="chat_history", return_messages=True),
+                "db_path": user_db_path
+            }
+            logger.info(f"Indexed {len(documents)} pages for Session {session_id}.")
+            return f"Indexed {len(documents)} pages securely."
         except Exception as e:
             logger.error(f"Vector Store Failure: {e}")
             raise RuntimeError(f"Indexing Failed: {e}")
 
-    def get_search_tool(self):
-        """Creates the retrieval tool with access to the Vector DB."""
+    def ask(self, session_id: str, query: str) -> Dict[str, Any]:
+        """Runs the Agent specifically for the requested Session ID."""
+        
+        # 1. Retrieve User Context
+        session_data = self.sessions.get(session_id)
+        user_db_path = self.get_session_path(session_id)
+
+        # Check if user has data (Security Check)
+        if not session_data or not os.path.exists(user_db_path):
+            return {"answer": "Please upload a document first to start a new session."}
+
+        # 2. Define User-Specific Tool (The "Search This User's File" Tool)
         @tool
-        def document_retriever(query: str):
+        def document_retriever(q: str):
             """
             Useful for finding specific information in the uploaded documents.
             Always use this tool first when asked about the candidate or file content.
             """
-            if not os.path.exists(DB_PATH):
-                return "The database is empty. Please ask the user to upload a document."
-            
             try:
-                # Safe Loading
+                # Load THIS user's specific DB
                 vector_store = FAISS.load_local(
-                    DB_PATH, 
+                    user_db_path, 
                     self.embeddings, 
                     allow_dangerous_deserialization=True
                 )
                 retriever = vector_store.as_retriever(search_kwargs={"k": 5})
-                docs = retriever.invoke(query)
+                docs = retriever.invoke(q)
                 
                 if not docs:
                     return "No relevant info found in the documents."
                 
-                # Format context clearly
-                context = "\n\n".join(
+                return "\n\n".join(
                     [f"[Page {d.metadata.get('page', '?')}] {d.page_content}" for d in docs]
                 )
-                return context
             except Exception as e:
                 return f"Retrieval Error: {str(e)}"
-        
-        return document_retriever
 
-    def ask(self, query: str) -> Dict[str, Any]:
-        """
-        The Main Agent Loop:
-        1. Setup Tools
-        2. Define System Persona (Professional, No Markdown)
-        3. Execute Agent
-        """
-        tools = [self.get_search_tool()]
+        tools = [document_retriever]
 
-        # THE "META-LEVEL" SYSTEM PROMPT (REPLACED ONLY)
+        # 3. YOUR EXACT SYSTEM PROMPT (Preserved 100%)
         system_prompt = (
             "You are an elite, enterprise-grade Retrieval-Augmented Generation (RAG) agent.\n\n"
             "Your sole responsibility is to answer user queries strictly by analyzing the retrieved documents.\n"
@@ -225,11 +213,12 @@ class AgenticRAG:
 
         agent = create_tool_calling_agent(self.llm, tools, prompt)
         
+        # 4. Execute Agent with User's Specific Memory
         agent_executor = AgentExecutor(
             agent=agent, 
             tools=tools, 
             verbose=True,
-            memory=self.memory,
+            memory=session_data["memory"], # Isolate conversation history
             max_iterations=4,
             handle_parsing_errors=True
         )
@@ -243,11 +232,11 @@ class AgenticRAG:
             return {"answer": "I encountered a processing error. Please check the backend logs."}
 
 # --- 4. GLOBAL INSTANCE (Singleton Pattern) ---
-rag_agent = AgenticRAG()
+session_manager = SessionManager()
 
-# --- 5. EXPOSED FUNCTIONS (For main.py to call) ---
-def build_database(upload_dir):
-    return rag_agent.ingest_documents(upload_dir)
+# --- 5. EXPOSED FUNCTIONS (Updated for Session Support) ---
+def build_database(upload_dir, session_id="default"):
+    return session_manager.ingest_documents(session_id, upload_dir)
 
-def get_answer(query):
-    return rag_agent.ask(query)
+def get_answer(query, session_id="default"):
+    return session_manager.ask(session_id, query)
