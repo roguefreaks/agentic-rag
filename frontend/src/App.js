@@ -5,7 +5,7 @@ import "./App.css";
 const MY_NAME = "Achyut Anand Pandey"; 
 const LINKEDIN_URL = "https://www.linkedin.com/in/achyut-pandey-02848032b/";
 // ⚠️ CHANGE THIS TO YOUR RENDER URL WHEN LIVE
-const API_URL = "http://localhost:8000"; 
+const API_URL = "https://agentic-rag-oens.onrender.com"; 
 
 function App() {
   const [query, setQuery] = useState("");
