@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './App.css';
-import logo from './logo.svg';
 
 // Simple ID generator (No install needed)
 const generateSessionId = () => {
@@ -82,7 +81,14 @@ function App() {
         <div className="upload-section">
           <label className="upload-btn">
             [ + UPLOAD DOC ]
-            <input type="file" multiple onChange={handleFileUpload} style={{ display: "none" }} />
+            {/* FIXED: Added 'accept' to force Document Picker on Mobile */}
+            <input 
+              type="file" 
+              multiple 
+              accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={handleFileUpload} 
+              style={{ display: "none" }} 
+            />
           </label>
         </div>
         <div className="file-list">
