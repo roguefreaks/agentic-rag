@@ -2,11 +2,11 @@ fastapi
 uvicorn
 python-dotenv
 python-multipart
-langchain
-langchain-community
-langchain-core
-langchain-openai
-langchain-text-splitters
+langchain==0.2.14
+langchain-community==0.2.12
+langchain-core==0.2.33
+langchain-openai==0.1.22
+langchain-text-splitters==0.2.2
 faiss-cpu
 pypdf
 docx2txt
