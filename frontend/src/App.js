@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './App.css';
 
-// ID Generator
 const generateSessionId = () => 'session-' + Math.random().toString(36).substr(2, 9);
 
 function App() {
@@ -14,9 +13,7 @@ function App() {
   const chatEndRef = useRef(null);
 
   useEffect(() => {
-    const newId = generateSessionId();
-    setSessionId(newId);
-    console.log("Current Session:", newId);
+    setSessionId(generateSessionId());
   }, []);
 
   const scrollToBottom = () => {
@@ -31,9 +28,8 @@ function App() {
     setFiles(uploadedFiles);
     
     const formData = new FormData();
-    // 1. Append Session ID
     formData.append("session_id", sessionId || "fallback-id");
-    // 2. Append Files
+    
     uploadedFiles.forEach(file => {
       formData.append("files", file);
     });
@@ -41,14 +37,16 @@ function App() {
     setMessages(prev => [...prev, { sender: "system", text: `[SYSTEM] Uploading ${uploadedFiles.length} files...` }]);
 
     try {
-      // --- THE FIX IS HERE ---
-      // We do NOT set 'Content-Type'. We let Axios handle it.
-      const response = await axios.post("https://agentic-rag-oens.onrender.com/upload", formData);
-      
-      setMessages(prev => [...prev, { sender: "system", text: "[SYSTEM] Success! I have read your documents." }]);
+      // FIX: No custom headers. Let Axios handle the boundary.
+      await axios.post("https://agentic-rag-oens.onrender.com/upload", formData);
+      setMessages(prev => [...prev, { sender: "system", text: "[SYSTEM] Success! Documents indexed." }]);
     } catch (error) {
       console.error("Upload Error:", error);
-      setMessages(prev => [...prev, { sender: "error", text: "[ERROR] Upload Failed. Server rejected the data." }]);
+      let errorText = "[ERROR] Upload Failed.";
+      if (error.response && error.response.data && error.response.data.detail) {
+        errorText += " " + error.response.data.detail;
+      }
+      setMessages(prev => [...prev, { sender: "error", text: errorText }]);
     }
   };
 
@@ -66,7 +64,7 @@ function App() {
       });
       setMessages(prev => [...prev, { sender: "bot", text: response.data.answer }]);
     } catch (error) {
-      setMessages(prev => [...prev, { sender: "error", text: "Connection Error. The brain is offline." }]);
+      setMessages(prev => [...prev, { sender: "error", text: "Connection Error. Please check backend." }]);
     }
     setLoading(false);
   };
@@ -75,7 +73,7 @@ function App() {
     <div className="app-container">
       <div className="sidebar">
         <div className="sidebar-header">
-          <h2>⚡ AGENTIC_RAG v6.0</h2> {/* Version Tag Updated */}
+          <h2>⚡ AGENTIC v7.0</h2> {/* Version 7.0 Tag */}
         </div>
         <div className="upload-section">
           <label className="upload-btn">
