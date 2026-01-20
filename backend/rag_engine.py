@@ -13,26 +13,42 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# CONFIG
+# --- CONFIGURATION (WITH CLEANING) ---
+# We use .strip() to remove accidental spaces or quotes from Render
+def get_clean_env(key):
+    val = os.getenv(key)
+    if val:
+        return val.strip().strip('"').strip("'")
+    return None
+
 DB_PATH = "faiss_index_web"
-API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
-ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
-API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
+API_KEY = get_clean_env("AZURE_OPENAI_API_KEY")
+ENDPOINT = get_clean_env("AZURE_OPENAI_ENDPOINT")
+API_VERSION = get_clean_env("AZURE_OPENAI_API_VERSION") or "2024-12-01-preview"
+
+# Log the config (Masked) to help debug
+logger.info(f"--- SYSTEM STARTUP ---")
+logger.info(f"Endpoint: {ENDPOINT}")
+logger.info(f"Version: {API_VERSION}")
+logger.info(f"Key Loaded: {'Yes' if API_KEY else 'No'}")
 
 # MODELS
-llm = AzureChatOpenAI(
-    azure_deployment="o3-mini",
-    api_version=API_VERSION,
-    azure_endpoint=ENDPOINT,
-    api_key=API_KEY
-)
+try:
+    llm = AzureChatOpenAI(
+        azure_deployment="o3-mini", # Must match your screenshot EXACTLY
+        api_version=API_VERSION,
+        azure_endpoint=ENDPOINT,
+        api_key=API_KEY
+    )
 
-embeddings = AzureOpenAIEmbeddings(
-    azure_deployment="text-embedding-3-small",
-    api_version=API_VERSION,
-    azure_endpoint=ENDPOINT,
-    api_key=API_KEY
-)
+    embeddings = AzureOpenAIEmbeddings(
+        azure_deployment="text-embedding-3-small", # Must match your screenshot EXACTLY
+        api_version=API_VERSION,
+        azure_endpoint=ENDPOINT,
+        api_key=API_KEY
+    )
+except Exception as e:
+    logger.error(f"Model Init Error: {e}")
 
 def build_database(upload_dir):
     """Reads all files and rebuilds the index."""
@@ -70,36 +86,32 @@ def get_answer(query):
         return {"answer": "System is empty. Please upload a document."}
 
     try:
-        # 1. Load Memory (Force Reload)
+        # 1. Load Memory
         vector_store = FAISS.load_local(
             DB_PATH, 
             embeddings, 
             allow_dangerous_deserialization=True
         )
         
-        # 2. Find relevant text (Top 4 chunks)
+        # 2. Find relevant text
         retriever = vector_store.as_retriever(search_kwargs={"k": 4})
         docs = retriever.invoke(query)
         
         if not docs:
             return {"answer": "I couldn't find any relevant info in the uploaded file."}
             
-        # 3. Combine text into a single block
+        # 3. Combine text
         context_text = "\n\n".join([d.page_content for d in docs])
         
         # 4. Send to AI
-        system_msg = "You are a precise assistant. Answer the question based ONLY on the provided Context below."
+        system_msg = "You are a precise assistant. Answer the question based ONLY on the provided Context."
         user_msg = f"Context:\n{context_text}\n\nQuestion: {query}"
         
-        messages = [
-            ("system", system_msg),
-            ("user", user_msg)
-        ]
+        messages = [("system", system_msg), ("user", user_msg)]
         
         response = llm.invoke(messages)
         return {"answer": response.content}
 
     except Exception as e:
         logger.error(f"Error: {e}")
-        # This will now tell us the EXACT error if it fails
         return {"answer": f"System Error: {str(e)}"}
