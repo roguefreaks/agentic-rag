@@ -14,32 +14,29 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- 1. NUCLEAR URL CLEANING (The Fix for your Screenshot) ---
+# --- 1. NUCLEAR URL CLEANING ---
 def clean_url(url):
     if not url: return ""
-    # Remove quotes, spaces
     url = url.strip().strip('"').strip("'")
-    # Remove trailing slash (The 404 Fix)
     url = url.rstrip('/')
-    # Remove accidental /openai suffix
     if "/openai" in url:
         url = url.split("/openai")[0]
     return url
 
 DB_PATH = "faiss_index_web"
 API_KEY = os.getenv("AZURE_OPENAI_API_KEY", "").strip()
-# We apply the cleaning function here to be 100% safe
 ENDPOINT = clean_url(os.getenv("AZURE_OPENAI_ENDPOINT"))
 API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview").strip()
 
 # --- 2. INITIALIZE MODELS ---
 try:
-    # THE BRAIN (o3-mini)
+    # THE BRAIN (o3-mini) - REMOVED TEMPERATURE TO FIX CRASH
     llm = AzureChatOpenAI(
         azure_deployment="o3-mini",
         api_version=API_VERSION,
         azure_endpoint=ENDPOINT,
         api_key=API_KEY,
+        # temperature=0  <-- DELETED THIS LINE. o3-mini DOES NOT ALLOW IT.
     )
 
     # THE EYES (Embeddings)
@@ -47,7 +44,7 @@ try:
         azure_deployment="text-embedding-3-small",
         api_version=API_VERSION,
         azure_endpoint=ENDPOINT,
-        api_key=API_KEY
+        api_key=API_KEY,
     )
 except Exception as e:
     logger.error(f"CRITICAL MODEL INIT FAILURE: {e}")
@@ -73,18 +70,15 @@ def build_database(upload_dir):
     if not documents:
         return "No documents found."
 
-    # Split text
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     splits = text_splitter.split_documents(documents)
 
-    # Create Index
     try:
         vector_store = FAISS.from_documents(documents=splits, embedding=embeddings)
         vector_store.save_local(DB_PATH)
         return f"Agent Memory Updated: {len(documents)} pages indexed."
     except Exception as e:
         logger.error(f"EMBEDDING FAILURE: {e}")
-        # Return the specific error so we can see it in the UI
         raise Exception(f"Azure Connection Failed: {str(e)}")
 
 # --- 4. AGENT TOOL ---
@@ -99,14 +93,13 @@ def search_documents(query: str):
     except Exception as e:
         return f"Memory Read Error: {e}"
 
-# --- 5. THE REACT AGENT (Reason + Act) ---
+# --- 5. THE REACT AGENT ---
 def get_answer(query):
-    # This setup creates the "Thought -> Action" loop your friend wants
     tools = [
         Tool(
             name="Document_Search",
             func=search_documents,
-            description="Use this tool to find facts in the uploaded document. Input should be a search query."
+            description="Use this tool to find facts in the uploaded document."
         )
     ]
 
@@ -115,16 +108,15 @@ def get_answer(query):
             tools,
             llm,
             agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-            verbose=True, # Logs the thinking process
+            verbose=True,
             handle_parsing_errors=True
         )
         response = agent_chain.invoke(query)
         
-        # Handle dict output
         if isinstance(response, dict) and "output" in response:
             return {"answer": response["output"]}
         return {"answer": str(response)}
         
     except Exception as e:
         logger.error(f"AGENT CRASH: {e}")
-        return {"answer": f"Agent Error: {str(e)}. Check backend logs."}
+        return {"answer": f"Agent Error: {str(e)}"}
